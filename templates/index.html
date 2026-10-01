@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>LogSense AI</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:860px;margin:30px auto;padding:0 16px}
+table{border-collapse:collapse;width:100%;margin-top:16px}
+td,th{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#f4f4f4}.bad{color:#b00020;font-weight:600}
+button{padding:6px 12px;cursor:pointer}
+</style></head>
+<body>
+<h1>LogSense AI</h1>
+<p>Upload a Linux server log. An Isolation Forest model flags unusual minutes and suggests a fix.</p>
+<input type="file" id="f"> <button onclick="run()">Analyze</button>
+<p id="summary"></p>
+<table id="t" style="display:none"><thead><tr>
+<th>Minute</th><th>Errors</th><th>Failures</th><th>Score</th><th>Suspect</th><th>Action</th></tr></thead><tbody></tbody></table>
+<pre id="out"></pre>
+<script>
+async function run(){
+  const fd=new FormData(); fd.append("logfile",document.getElementById("f").files[0]);
+  const r=await (await fetch("/api/analyze",{method:"POST",body:fd})).json();
+  if(r.error){document.getElementById("summary").textContent=r.error;return;}
+  document.getElementById("summary").innerHTML=
+    `Parsed ${r.parsed_lines} lines, ${r.minutes_analyzed} minutes, <span class="bad">${r.anomaly_count} anomalies</span>`;
+  const tb=document.querySelector("#t tbody"); tb.innerHTML="";
+  r.anomalies.forEach(a=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${a.minute}</td><td>${a.errors}</td><td>${a.failures}</td><td>${a.score}</td><td>${a.suspect_service||"-"}</td>
+    <td>${a.suspect_service?`<button onclick="fix('${a.suspect_service}')">Remediate (dry run)</button>`:"-"}</td>`;
+    tb.appendChild(tr);});
+  document.getElementById("t").style.display="table";
+}
+async function fix(s){
+  const r=await (await fetch("/api/remediate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:s})})).json();
+  document.getElementById("out").textContent=JSON.stringify(r,null,2);
+}
+</script></body></html>
